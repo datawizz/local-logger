@@ -1,0 +1,80 @@
+[package]
+name = "local-logger"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "local_logger"
+path = "src/lib.rs"
+
+[[bin]]
+name = "local-logger"
+path = "src/main.rs"
+
+[dependencies]
+# MCP SDK
+rmcp = { version = "0.3.0", features = ["server", "macros", "transport-io"] }
+
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+
+# HTTP server and client
+hyper = { version = "1.5", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+
+# TLS support
+tokio-rustls = "0.26"
+rustls = "0.23"
+rustls-pemfile = "2.0"
+rcgen = { version = "0.13", features = ["pem", "x509-parser"] }
+
+# HTTP connector
+hyper-rustls = { version = "0.27", features = ["http2"] }
+
+# CLI argument parsing
+clap = { version = "4.0", features = ["derive"] }
+
+# Error handling
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Schema generation for MCP tools
+schemars = { version = "1.0", features = ["chrono04"] }
+
+# Time handling for log timestamps
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Base64 encoding
+base64 = "0.22"
+
+# Byte utilities
+bytes = "1.0"
+
+# Compression support
+flate2 = "1.0"
+
+# File locking for cross-process safety
+fs2 = "0.4"
+
+[dev-dependencies]
+tempfile = "3.0"
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+tokio-test = "0.4"
+proptest = "1.0"
+
+[[bench]]
+name = "local_logger_bench"
+harness = false
