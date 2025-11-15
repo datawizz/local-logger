@@ -29,3 +29,6 @@ certs/
 *.pem
 *.key
 *.crt
+
+# MacOS build artifacts
+packaging/macos/build/*
