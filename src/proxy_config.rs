@@ -154,13 +154,21 @@ fn default_listen_port() -> u16 {
 }
 
 fn default_cert_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".local-logger").join("certs")
+    let home = std::env::var("HOME")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir())
+        .unwrap_or_else(|| PathBuf::from("."));
+    home.join(".local-logger").join("certs")
 }
 
 fn default_output_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".local-logger")
+    let home = std::env::var("HOME")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir())
+        .unwrap_or_else(|| PathBuf::from("."));
+    home.join(".local-logger")
 }
 
 fn default_max_body_size() -> usize {
@@ -178,6 +186,7 @@ fn default_true() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -201,6 +210,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_from_env() {
         std::env::set_var("CLAUDE_LOGGER_PROXY_PORT", "9090");
         let config = ProxyConfig::from_env();

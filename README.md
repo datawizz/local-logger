@@ -41,13 +41,43 @@ This provides a complete, declarative setup for Claude Code logging and proxy fu
 
 ## Installation
 
-```bash
-# Build from source
-cargo build --release
+### macOS PKG Installer (Recommended for macOS)
 
-# Install to PATH (optional)
+The easiest way to install on macOS is using the `.pkg` installer:
+
+1. Download the latest `.pkg` from the [releases page](https://github.com/yourusername/local-logger/releases)
+2. Double-click the installer and follow the prompts
+3. Enter your password when requested
+
+The installer will:
+- Install the binary to `/usr/local/bin/local-logger`
+- Generate and trust TLS certificates for HTTPS interception
+- Set up a LaunchAgent to auto-start the proxy
+- Install an uninstaller at `/usr/local/bin/local-logger-uninstall.sh`
+
+See [macOS PKG Installation Guide](docs/installation/macos-pkg.md) for detailed instructions.
+
+### From Source
+
+```bash
+# Using Make (recommended)
+make release        # Build release binary
+make install        # Install to ~/.cargo/bin
+make init           # Initialize certificates
+make pkg            # Build macOS PKG installer
+
+# Or using Cargo directly
+cargo build --release
 cargo install --path .
+local-logger init
+
+# See all available commands
+make help
 ```
+
+### Nix/NixOS
+
+This repository includes a Nix module for declarative installation. See [Nix Module](#nix-module) section above.
 
 ## Usage
 
@@ -99,6 +129,65 @@ export HTTP_PROXY=http://127.0.0.1:6969
 claude "Help me with this code"
 ```
 
+### Certificate Initialization
+
+Initialize TLS certificates for HTTPS interception:
+
+```bash
+# Generate certificates with default settings
+local-logger init
+
+# Force regenerate even if they exist
+local-logger init --force
+
+# Use a custom certificate directory
+local-logger init --cert-dir /custom/path
+
+# Quiet mode (for scripts)
+local-logger init --quiet
+```
+
+The `init` command:
+- Creates `~/.local-logger/certs/` directory (or custom path)
+- Generates a self-signed CA certificate (`ca.pem`)
+- Generates a private key (`ca.key`)
+- Provides instructions for trusting the certificate
+- Is idempotent (safe to run multiple times)
+
+**Note:** The PKG installer automatically runs `init` and trusts the certificate during installation.
+
+### Claude Code Configuration Management
+
+Install or uninstall local-logger from Claude Code configuration automatically:
+
+```bash
+# Install local-logger into Claude Code
+local-logger install-claude
+
+# Uninstall local-logger from Claude Code
+local-logger uninstall-claude
+
+# Quiet mode (for scripts)
+local-logger install-claude --quiet
+local-logger uninstall-claude --quiet
+```
+
+The `install-claude` command:
+- Adds local-logger MCP server to `~/.claude.json`
+- Adds hooks to `~/.claude/settings.json` for all hook types (PreToolUse, PostToolUse, etc.)
+- Creates files and directories if they don't exist
+- Preserves all existing configuration
+- Is idempotent (safe to run multiple times)
+
+The `uninstall-claude` command:
+- Surgically removes only local-logger MCP server entry from `~/.claude.json`
+- Surgically removes only local-logger hooks from `~/.claude/settings.json`
+- Preserves all other hooks and configuration
+- Cleans up empty hook type arrays
+- Is idempotent (safe to run multiple times)
+
+**Note:** The PKG installer and Nix modules automatically run `install-claude` during installation.
+
 #### Certificate Installation
 
 On first run, the proxy will generate a root CA certificate. You need to trust this certificate:
@@ -149,9 +238,19 @@ export CLAUDE_MCP_LOCAL_LOGGER_DIR=$HOME/.local-logger
 
 ## Claude Code Integration
 
-The Nix module automatically configures Claude Code to use this tool. Manual configuration:
+### Automatic Configuration
 
-Add to your `~/.claude/settings.json`:
+The easiest way to configure Claude Code is using the built-in command:
+
+```bash
+local-logger install-claude
+```
+
+This automatically adds the MCP server and hooks to your Claude Code configuration files.
+
+### Manual Configuration (Alternative)
+
+The Nix module and PKG installer automatically configure Claude Code. If you need to configure manually, add to your `~/.claude/settings.json`:
 
 ```json
 {
@@ -182,6 +281,16 @@ And to `~/.claude.json`:
 ```
 
 All hook events will be logged to the daily log file (e.g., `2025-10-03.jsonl`).
+
+### Removing Configuration
+
+To remove local-logger from Claude Code:
+
+```bash
+local-logger uninstall-claude
+```
+
+This surgically removes only local-logger entries while preserving all other configuration.
 
 ## Log Format
 

@@ -13,7 +13,7 @@
       in
       {
         # Package output
-        packages.default = pkgs.callPackage ./nix/package.nix { inherit self; };
+        packages.default = pkgs.callPackage ./packaging/nix/package.nix { inherit self; };
         packages.local-logger = self.packages.${system}.default;
 
         # Development shell
@@ -41,19 +41,19 @@
       }
     ) // {
       # NixOS/Darwin modules (not system-specific)
-      nixosModules.default = import ./nix/modules/nixos-service.nix;
+      nixosModules.default = import ./packaging/nix/modules/nixos-service.nix;
       nixosModules.local-logger = self.nixosModules.default;
 
-      darwinModules.default = import ./nix/modules/darwin-service.nix;
+      darwinModules.default = import ./packaging/nix/modules/darwin-service.nix;
       darwinModules.local-logger = self.darwinModules.default;
 
       # Cross-platform base module
-      nixModules.default = import ./nix/modules/local-logger.nix;
+      nixModules.default = import ./packaging/nix/modules/local-logger.nix;
       nixModules.local-logger = self.nixModules.default;
 
       # Overlay for adding package to nixpkgs
       overlays.default = final: prev: {
-        local-logger = final.callPackage ./nix/package.nix {
+        local-logger = final.callPackage ./packaging/nix/package.nix {
           inherit self;
         };
       };

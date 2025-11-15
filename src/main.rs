@@ -36,6 +36,7 @@
 //! All modes write logs to the same unified daily log file.
 
 mod certificate_manager;
+mod claude_config;
 mod jsonl_tracing_layer;
 mod log_writer;
 mod proxy_config;
@@ -43,7 +44,8 @@ mod proxy_server;
 pub mod schema;
 mod tail_reader;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use certificate_manager::CertificateManager;
 use clap::{Parser, Subcommand};
 use log_writer::LogWriter;
 use proxy_config::ProxyConfig;
@@ -89,6 +91,30 @@ enum Commands {
         /// Listen port (overrides config)
         #[arg(short, long)]
         port: Option<u16>,
+    },
+    /// Initialize certificates and configuration
+    Init {
+        /// Force regenerate even if certificates exist
+        #[arg(short, long)]
+        force: bool,
+        /// Custom certificate directory (defaults to ~/.local-logger/certs)
+        #[arg(short, long)]
+        cert_dir: Option<PathBuf>,
+        /// Suppress output (only print errors)
+        #[arg(short, long)]
+        quiet: bool,
+    },
+    /// Install local-logger into Claude Code configuration
+    InstallClaude {
+        /// Suppress output (only print errors)
+        #[arg(short, long)]
+        quiet: bool,
+    },
+    /// Uninstall local-logger from Claude Code configuration
+    UninstallClaude {
+        /// Suppress output (only print errors)
+        #[arg(short, long)]
+        quiet: bool,
     },
 }
 
@@ -461,6 +487,18 @@ fn main() -> Result<()> {
                 .build()?
                 .block_on(run_proxy_server(config, port))
         }
+        Some(Commands::Init { force, cert_dir, quiet }) => {
+            // Run certificate initialization synchronously
+            run_init_command(force, cert_dir, quiet)
+        }
+        Some(Commands::InstallClaude { quiet }) => {
+            // Install local-logger into Claude Code configuration
+            claude_config::install_claude_config(quiet)
+        }
+        Some(Commands::UninstallClaude { quiet }) => {
+            // Uninstall local-logger from Claude Code configuration
+            claude_config::uninstall_claude_config(quiet)
+        }
         Some(Commands::Serve) | None => {
             // Run as MCP server with multi-threaded runtime
             tokio::runtime::Builder::new_multi_thread()
@@ -600,6 +638,104 @@ fn run_hook_mode_sync() -> Result<()> {
 
     // Return success (exit code 0 to allow execution)
     Ok(())
+}
+
+/// Initialize certificates synchronously
+///
+/// This function:
+/// 1. Determines the certificate directory (from --cert-dir, env var, or default)
+/// 2. Creates the CertificateManager which generates or loads the CA certificate
+/// 3. Provides clear feedback on success or failure
+/// 4. Exits with code 0 on success, 1 on failure
+fn run_init_command(force: bool, cert_dir: Option<PathBuf>, quiet: bool) -> Result<()> {
+    // Determine certificate directory
+    let cert_path = if let Some(dir) = cert_dir {
+        dir
+    } else if let Ok(dir) = std::env::var("CLAUDE_LOGGER_PROXY_CERT_DIR") {
+        PathBuf::from(dir)
+    } else {
+        // Default: ~/.local-logger/certs (using dirs crate)
+        let home = dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."));
+        home.join(".local-logger").join("certs")
+    };
+
+    let ca_cert_path = cert_path.join("ca.pem");
+    let ca_key_path = cert_path.join("ca.key");
+
+    // Check if certificates already exist
+    if !force && ca_cert_path.exists() && ca_key_path.exists() {
+        if !quiet {
+            println!("Certificates already exist at: {}", cert_path.display());
+            println!("  CA Certificate: {}", ca_cert_path.display());
+            println!("  CA Private Key: {}", ca_key_path.display());
+            println!();
+            println!("Use --force to regenerate certificates.");
+        }
+        return Ok(());
+    }
+
+    // If force is set, remove existing certificates
+    if force {
+        if ca_cert_path.exists() {
+            std::fs::remove_file(&ca_cert_path)
+                .context("Failed to remove existing CA certificate")?;
+        }
+        if ca_key_path.exists() {
+            std::fs::remove_file(&ca_key_path)
+                .context("Failed to remove existing CA private key")?;
+        }
+        if !quiet {
+            println!("Removed existing certificates for regeneration.");
+        }
+    }
+
+    if !quiet {
+        println!("Initializing local-logger certificates...");
+        println!("Certificate directory: {}", cert_path.display());
+        println!();
+    }
+
+    // Create CertificateManager (this generates certs if they don't exist)
+    match CertificateManager::new(&cert_path) {
+        Ok(_) => {
+            if !quiet {
+                println!("✓ Successfully initialized certificates!");
+                println!();
+                println!("Certificate files created:");
+                println!("  CA Certificate: {}", ca_cert_path.display());
+                println!("  CA Private Key: {}", ca_key_path.display());
+                println!();
+                println!("Next steps:");
+                println!("  1. Trust the CA certificate in your system keychain:");
+
+                #[cfg(target_os = "macos")]
+                println!("     sudo security add-trusted-cert -d -r trustRoot \\");
+                #[cfg(target_os = "macos")]
+                println!("       -k /Library/Keychains/System.keychain \\");
+                #[cfg(target_os = "macos")]
+                println!("       {}", ca_cert_path.display());
+
+                #[cfg(target_os = "linux")]
+                println!("     sudo cp {} /usr/local/share/ca-certificates/local-logger.crt", ca_cert_path.display());
+                #[cfg(target_os = "linux")]
+                println!("     sudo update-ca-certificates");
+
+                println!();
+                println!("  2. Start the proxy: local-logger proxy");
+                println!("  3. Configure your environment:");
+                println!("     export HTTPS_PROXY=http://127.0.0.1:6969");
+                println!("     export HTTP_PROXY=http://127.0.0.1:6969");
+            }
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("✗ Failed to initialize certificates: {}", e);
+            eprintln!();
+            eprintln!("Error details: {:?}", e);
+            std::process::exit(1);
+        }
+    }
 }
 
 #[cfg(test)]

@@ -274,10 +274,13 @@ impl ProxyServer {
         let path = req.uri().path().to_string();
         let query = req.uri().query().map(|q| q.to_string());
 
+        // Strip default HTTPS port (443) from host if present
+        let host_without_default_port = host.strip_suffix(":443").unwrap_or(&host);
+
         let full_uri = if let Some(q) = query {
-            format!("https://{}{}?{}", host, path, q)
+            format!("https://{}{}?{}", host_without_default_port, path, q)
         } else {
-            format!("https://{}{}", host, path)
+            format!("https://{}{}", host_without_default_port, path)
         };
 
         tracing::info!("HTTPS: {} {}", method, full_uri);
@@ -340,6 +343,7 @@ impl ProxyServer {
             .with_native_roots()?
             .https_or_http()
             .enable_http1()
+            .enable_http2()
             .build();
 
         let client: hyper_util::client::legacy::Client<_, Full<Bytes>> =
@@ -359,7 +363,11 @@ impl ProxyServer {
             .body(Full::new(body_bytes.clone()))?;
 
         // Send request
-        let resp = client.request(new_req).await?;
+        let resp = client.request(new_req).await
+            .map_err(|e| {
+                tracing::error!("Failed to forward request to {}: {:?}", uri, e);
+                e
+            })?;
 
         // Calculate duration
         let duration_ms = start.elapsed().as_millis() as u64;

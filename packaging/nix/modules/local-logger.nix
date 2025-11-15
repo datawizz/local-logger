@@ -28,7 +28,9 @@ with lib;
     };
 
     proxy = {
-      enable = mkEnableOption "HTTPS proxy service" // { default = true; };
+      enable = mkEnableOption "HTTPS proxy service" // {
+        default = true;
+      };
 
       port = mkOption {
         type = types.port;
