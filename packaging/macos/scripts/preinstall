@@ -1,0 +1,91 @@
+#!/bin/bash
+#
+# Pre-install script for local-logger PKG
+#
+# This script runs before installation and:
+# 1. Stops and unloads any running LaunchAgent
+# 2. Backs up existing configuration if present
+# 3. Prepares for clean installation
+#
+
+set -e
+
+# Logging function
+log() {
+    echo "[local-logger preinstall] $1"
+}
+
+# Source conflict detection script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../scripts/detect-conflicts.sh"
+
+# Check for conflicting Nix installation
+detect_and_exit_if_nix || exit 1
+
+log "Starting pre-installation cleanup..."
+
+# Determine the current user
+# SUDO_USER is authoritative when using sudo
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    CURRENT_USER="$SUDO_USER"
+elif [ -n "$USER" ] && [ "$USER" != "root" ]; then
+    CURRENT_USER="$USER"
+else
+    # Fallback to console user for GUI installs
+    CURRENT_USER=$(stat -f '%Su' /dev/console 2>/dev/null)
+    if [ -z "$CURRENT_USER" ] || [ "$CURRENT_USER" = "root" ]; then
+        echo "ERROR: Cannot detect installation user" >&2
+        echo "Please run with sudo as a regular user: sudo ./install.sh" >&2
+        exit 1
+    fi
+fi
+
+log "Preparing installation for user: $CURRENT_USER"
+
+# Get user's home directory
+USER_HOME=$(eval echo "~$CURRENT_USER")
+USER_UID=$(id -u "$CURRENT_USER")
+
+# LaunchAgent configuration
+LAUNCHAGENT_LABEL="org.cogent-creation-co.local-logger-proxy"
+LAUNCHAGENT_PLIST="/Library/LaunchAgents/$LAUNCHAGENT_LABEL.plist"
+
+# Check if LaunchAgent is currently loaded
+if sudo -u "$CURRENT_USER" launchctl list | grep -q "$LAUNCHAGENT_LABEL" 2>/dev/null; then
+    log "Stopping existing LaunchAgent..."
+
+    # Try modern bootout method
+    if sudo -u "$CURRENT_USER" launchctl bootout "gui/$USER_UID/$LAUNCHAGENT_LABEL" 2>/dev/null; then
+        log "✓ LaunchAgent stopped (bootout)"
+    # Fallback to legacy unload method
+    elif sudo -u "$CURRENT_USER" launchctl unload "$LAUNCHAGENT_PLIST" 2>/dev/null; then
+        log "✓ LaunchAgent stopped (unload)"
+    else
+        log "WARNING: Failed to stop LaunchAgent (it may not be running)"
+    fi
+
+    # Give it a moment to stop
+    sleep 1
+fi
+
+# Backup existing configuration if it exists
+LOGGER_DIR="$USER_HOME/.local-logger"
+if [ -d "$LOGGER_DIR" ]; then
+    BACKUP_DIR="$USER_HOME/.local-logger.backup.$(date +%Y%m%d_%H%M%S)"
+    log "Backing up existing configuration to: $BACKUP_DIR"
+
+    # Only backup certificates and config, not logs
+    mkdir -p "$BACKUP_DIR"
+
+    if [ -d "$LOGGER_DIR/certs" ]; then
+        cp -R "$LOGGER_DIR/certs" "$BACKUP_DIR/"
+        log "✓ Certificates backed up"
+    fi
+
+    # Note: We don't remove the old directory, just back up certs
+    # Logs remain untouched
+fi
+
+log "Pre-installation cleanup complete"
+
+exit 0

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to local-logger</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-bottom: 10px;
+        }
+        h2 {
+            font-size: 18px;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        p {
+            margin-bottom: 12px;
+        }
+        ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .highlight {
+            background-color: #f5f5f7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .important {
+            color: #bf4800;
+            font-weight: 500;
+        }
+        code {
+            background-color: #f5f5f7;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "SF Mono", Monaco, "Courier New", monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to local-logger</h1>
+
+    <p>This installer will set up <strong>local-logger</strong>, a powerful logging and proxy tool for Claude Code development.</p>
+
+    <h2>What is local-logger?</h2>
+
+    <p>local-logger is a multi-purpose tool that provides:</p>
+
+    <ul>
+        <li><strong>MCP Server</strong> - Model Context Protocol server for logging operations in Claude Code</li>
+        <li><strong>Hook Logger</strong> - Captures and logs Claude Code tool usage events</li>
+        <li><strong>HTTPS Proxy</strong> - Records Claude API traffic for debugging and analysis</li>
+    </ul>
+
+    <p>All logs are stored in structured JSON format with automatic daily rotation.</p>
+
+    <h2>What will be installed?</h2>
+
+    <div class="highlight">
+        <ul>
+            <li><code>/usr/local/bin/local-logger</code> - Main binary</li>
+            <li><code>/usr/local/bin/local-logger-uninstall.sh</code> - Uninstaller script</li>
+            <li><code>/Library/LaunchAgents/org.local-logger.proxy.plist</code> - Auto-start service</li>
+            <li><code>~/.local-logger/</code> - Log files and certificates</li>
+        </ul>
+    </div>
+
+    <h2>What happens during installation?</h2>
+
+    <p>The installer will:</p>
+
+    <ol>
+        <li>Install the local-logger binary</li>
+        <li>Generate TLS certificates for HTTPS interception</li>
+        <li><span class="important">Install and trust the CA certificate in your system keychain</span></li>
+        <li>Set up and start the proxy service</li>
+    </ol>
+
+    <h2>Important Notes</h2>
+
+    <div class="highlight">
+        <p class="important">Administrator privileges are required.</p>
+
+        <p>This installer will:</p>
+        <ul>
+            <li>Generate a self-signed CA certificate for HTTPS interception</li>
+            <li>Install this certificate to your system keychain with root trust</li>
+            <li>Start a local proxy service on port 6969</li>
+        </ul>
+
+        <p><strong>Privacy & Security:</strong> The proxy only runs locally (127.0.0.1) and all logs are stored on your machine. No data is sent externally.</p>
+    </div>
+
+    <p>Click <strong>Continue</strong> to proceed with the installation.</p>
+</body>
+</html>

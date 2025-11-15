@@ -1,0 +1,196 @@
+#!/bin/bash
+#
+# Post-install script for local-logger PKG
+#
+# This script runs after the PKG files are installed and:
+# 1. Initializes certificates using `local-logger init`
+# 2. Installs the CA certificate to the system keychain
+# 3. Loads the LaunchAgent to auto-start the proxy
+# 4. Sets proper permissions on all files
+#
+
+set -e
+
+# Logging function
+log() {
+    echo "[local-logger postinstall] $1"
+}
+
+log "Starting post-installation setup..."
+
+# Determine the current user (not root, but the actual user running the installer)
+# SUDO_USER is authoritative when using sudo
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    CURRENT_USER="$SUDO_USER"
+elif [ -n "$USER" ] && [ "$USER" != "root" ]; then
+    CURRENT_USER="$USER"
+else
+    # Fallback to console user for GUI installs
+    CURRENT_USER=$(stat -f '%Su' /dev/console 2>/dev/null)
+    if [ -z "$CURRENT_USER" ] || [ "$CURRENT_USER" = "root" ]; then
+        echo "ERROR: Cannot detect installation user" >&2
+        echo "Please run with sudo as a regular user" >&2
+        exit 1
+    fi
+fi
+
+log "Installing for user: $CURRENT_USER"
+
+# Get user's home directory
+USER_HOME=$(eval echo "~$CURRENT_USER")
+if [ ! -d "$USER_HOME" ]; then
+    log "ERROR: Cannot determine home directory for user $CURRENT_USER"
+    exit 1
+fi
+
+log "User home directory: $USER_HOME"
+
+# Certificate paths
+LOGGER_DIR="$USER_HOME/.local-logger"
+CERTS_DIR="$LOGGER_DIR/certs"
+CA_CERT="$CERTS_DIR/ca.pem"
+CA_KEY="$CERTS_DIR/ca.key"
+
+# LaunchAgent paths
+LAUNCHAGENT_LABEL="org.cogent-creation-co.local-logger-proxy"
+LAUNCHAGENT_PLIST="/Library/LaunchAgents/$LAUNCHAGENT_LABEL.plist"
+USER_LAUNCHAGENT_DIR="$USER_HOME/Library/LaunchAgents"
+
+# Binary path
+BINARY="/usr/local/bin/local-logger"
+
+# Verify binary was installed
+if [ ! -f "$BINARY" ]; then
+    log "ERROR: Binary not found at $BINARY"
+    exit 1
+fi
+
+log "✓ Binary installed at $BINARY"
+
+# Initialize certificates
+log "Initializing certificates..."
+
+# Run as the actual user, not root
+if sudo -u "$CURRENT_USER" "$BINARY" init --quiet; then
+    log "✓ Certificates initialized successfully"
+else
+    log "WARNING: Certificate initialization failed"
+    log "  You may need to run: $BINARY init"
+fi
+
+# Verify certificates were created
+if [ -f "$CA_CERT" ]; then
+    log "✓ CA certificate found: $CA_CERT"
+
+    # Set proper permissions
+    chown "$CURRENT_USER" "$CA_CERT"
+    chmod 644 "$CA_CERT"
+
+    if [ -f "$CA_KEY" ]; then
+        chown "$CURRENT_USER" "$CA_KEY"
+        chmod 600 "$CA_KEY"
+    fi
+
+    # Install CA certificate to system keychain
+    log "Installing CA certificate to system keychain..."
+
+    # Check if already trusted
+    if security verify-cert -c "$CA_CERT" >/dev/null 2>&1; then
+        log "✓ CA certificate already trusted in system keychain"
+    else
+        log "  Trusting CA certificate..."
+        if security add-trusted-cert -d -r trustRoot \
+            -k /Library/Keychains/System.keychain \
+            "$CA_CERT"; then
+            log "✓ CA certificate trusted successfully"
+        else
+            log "WARNING: Failed to trust CA certificate automatically" >&2
+            log "  Please run manually:" >&2
+            log "  sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain $CA_CERT" >&2
+        fi
+    fi
+else
+    log "WARNING: CA certificate not found at $CA_CERT"
+fi
+
+# Set up LaunchAgent
+log "Setting up LaunchAgent..."
+
+# Verify LaunchAgent plist was installed
+if [ -f "$LAUNCHAGENT_PLIST" ]; then
+    log "✓ LaunchAgent plist found: $LAUNCHAGENT_PLIST"
+
+    # Set proper permissions
+    chmod 644 "$LAUNCHAGENT_PLIST"
+    chown root:wheel "$LAUNCHAGENT_PLIST"
+
+    # Get user's UID for launchctl
+    USER_UID=$(id -u "$CURRENT_USER")
+
+    # Unload if already loaded (in case of reinstall)
+    if sudo -u "$CURRENT_USER" launchctl list | grep -q "$LAUNCHAGENT_LABEL"; then
+        log "  Unloading existing LaunchAgent..."
+        sudo -u "$CURRENT_USER" launchctl bootout "gui/$USER_UID/$LAUNCHAGENT_LABEL" 2>/dev/null || true
+    fi
+
+    # Load the LaunchAgent for the current user
+    log "  Loading LaunchAgent..."
+    if sudo -u "$CURRENT_USER" launchctl bootstrap "gui/$USER_UID" "$LAUNCHAGENT_PLIST" 2>/dev/null; then
+        log "✓ LaunchAgent loaded successfully"
+        log "  Proxy will start automatically on login"
+    else
+        # Try alternative load method
+        if sudo -u "$CURRENT_USER" launchctl load "$LAUNCHAGENT_PLIST" 2>/dev/null; then
+            log "✓ LaunchAgent loaded successfully (legacy method)"
+        else
+            log "WARNING: Failed to load LaunchAgent automatically"
+            log "  You can load it manually:"
+            log "  launchctl load $LAUNCHAGENT_PLIST"
+        fi
+    fi
+
+    # Verify it's running
+    sleep 1
+    if sudo -u "$CURRENT_USER" launchctl list | grep -q "$LAUNCHAGENT_LABEL"; then
+        log "✓ LaunchAgent is running"
+    else
+        log "WARNING: LaunchAgent may not have started"
+        log "  Check logs at: /tmp/local-logger-proxy.log"
+    fi
+else
+    log "WARNING: LaunchAgent plist not found at $LAUNCHAGENT_PLIST"
+fi
+
+# Verify uninstaller
+UNINSTALLER="/usr/local/bin/local-logger-uninstall.sh"
+if [ -f "$UNINSTALLER" ]; then
+    log "✓ Uninstaller available at $UNINSTALLER"
+    chmod 755 "$UNINSTALLER"
+else
+    log "WARNING: Uninstaller not found"
+fi
+
+# Configure Claude Code
+log "Configuring Claude Code..."
+
+if sudo -u "$CURRENT_USER" "$BINARY" install-claude --quiet; then
+    log "✓ Claude Code configured successfully"
+else
+    log "WARNING: Claude Code configuration failed"
+    log "  You can configure manually: $BINARY install-claude"
+fi
+
+log ""
+log "======================================"
+log "  Installation complete!"
+log "======================================"
+log ""
+log "Next steps:"
+log "  1. Claude Code is configured to use local-logger"
+log "  2. The proxy is running on http://127.0.0.1:6969"
+log "  3. Logs are stored in: $LOGGER_DIR"
+log ""
+log "To uninstall: sudo $UNINSTALLER"
+log ""
+
+exit 0

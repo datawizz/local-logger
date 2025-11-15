@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Installation Complete</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-bottom: 10px;
+        }
+        h2 {
+            font-size: 18px;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        p {
+            margin-bottom: 12px;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .success {
+            background-color: #e8f5e9;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #4caf50;
+        }
+        .info {
+            background-color: #f5f5f7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        code {
+            background-color: #f5f5f7;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: "SF Mono", Monaco, "Courier New", monospace;
+            font-size: 12px;
+        }
+        .code-block {
+            background-color: #1d1d1f;
+            color: #f5f5f7;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-family: "SF Mono", Monaco, "Courier New", monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>✓ Installation Complete!</h1>
+
+    <div class="success">
+        <p><strong>local-logger has been successfully installed.</strong></p>
+        <p>The proxy service is now running on <code>http://127.0.0.1:6969</code></p>
+    </div>
+
+    <h2>What was installed:</h2>
+
+    <ul>
+        <li><strong>Binary:</strong> <code>/usr/local/bin/local-logger</code></li>
+        <li><strong>Certificates:</strong> <code>~/.local-logger/certs/</code></li>
+        <li><strong>Log directory:</strong> <code>~/.local-logger/</code></li>
+        <li><strong>LaunchAgent:</strong> Auto-starts on login</li>
+    </ul>
+
+    <h2>Next Steps</h2>
+
+    <h3>1. Configure Claude Code MCP Server</h3>
+
+    <p>Add local-logger to your Claude Code settings (<code>~/.claude/settings.json</code>):</p>
+
+    <div class="code-block">{
+  "mcpServers": {
+    "local-logger": {
+      "command": "/usr/local/bin/local-logger",
+      "args": ["serve"]
+    }
+  }
+}</div>
+
+    <h3>2. Optional: Enable Hook Logging</h3>
+
+    <p>To log Claude Code tool usage events, add to your settings:</p>
+
+    <div class="code-block">{
+  "hooks": {
+    "PreToolUse": [{
+      "type": "command",
+      "command": "/usr/local/bin/local-logger hook"
+    }]
+  }
+}</div>
+
+    <h3>3. Optional: Use the HTTPS Proxy</h3>
+
+    <p>To record Claude API traffic, set these environment variables:</p>
+
+    <div class="code-block">export HTTPS_PROXY=http://127.0.0.1:6969
+export HTTP_PROXY=http://127.0.0.1:6969</div>
+
+    <h2>Useful Commands</h2>
+
+    <div class="info">
+        <p><strong>Check if proxy is running:</strong></p>
+        <code>launchctl list | grep local-logger</code>
+
+        <p style="margin-top: 15px;"><strong>View proxy logs:</strong></p>
+        <code>tail -f /tmp/local-logger-proxy.log</code>
+
+        <p style="margin-top: 15px;"><strong>View your logs:</strong></p>
+        <code>ls -la ~/.local-logger/</code>
+
+        <p style="margin-top: 15px;"><strong>Uninstall:</strong></p>
+        <code>sudo /usr/local/bin/local-logger-uninstall.sh</code>
+    </div>
+
+    <h2>Documentation</h2>
+
+    <p>For full documentation, visit the local-logger repository or run:</p>
+    <div class="code-block">local-logger --help</div>
+
+    <h2>Troubleshooting</h2>
+
+    <p>If the proxy isn't working:</p>
+    <ol>
+        <li>Check the logs: <code>cat /tmp/local-logger-proxy.err</code></li>
+        <li>Verify certificates: <code>ls -la ~/.local-logger/certs/</code></li>
+        <li>Reinstall certificates: <code>sudo local-logger init --force</code></li>
+    </ol>
+
+    <p style="margin-top: 30px;">Thank you for installing local-logger!</p>
+</body>
+</html>
