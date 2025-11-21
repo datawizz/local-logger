@@ -268,40 +268,6 @@ mod tests {
         assert!(log_path.starts_with(&custom_path));
     }
 
-    #[test]
-    #[ignore] // Disabled: fails in Nix sandbox with permission denied
-    #[serial]
-    fn test_from_env_without_home() {
-        // Test that dirs::home_dir() works when a real user exists
-        let original_home = std::env::var("HOME").ok();
-        std::env::remove_var("HOME");
-        std::env::remove_var("CLAUDE_MCP_LOCAL_LOGGER_DIR");
-
-        let result = LogWriter::from_env();
-
-        // In normal environments (real user exists), this should work via dirs::home_dir()
-        // In restricted environments (nix sandbox, no user), it will fail gracefully
-        match result {
-            Ok(_) => {
-                // dirs::home_dir() found a user - expected in normal environments
-            }
-            Err(e) => {
-                // Only acceptable error is "Could not determine home directory"
-                // This happens in nix sandbox where no real user exists
-                assert!(
-                    e.to_string().contains("Could not determine home directory"),
-                    "Unexpected error: {}. Expected either success or 'Could not determine home directory'",
-                    e
-                );
-            }
-        }
-
-        // Restore HOME
-        if let Some(home) = original_home {
-            std::env::set_var("HOME", home);
-        }
-    }
-
     #[tokio::test]
     async fn test_write_async() {
         let temp_dir = TempDir::new().unwrap();

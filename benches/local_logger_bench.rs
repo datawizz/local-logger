@@ -1,8 +1,13 @@
+mod common;
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use local_logger::log_writer::LogWriter;
 use local_logger::schema::LogEntry;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write, BufReader, BufRead, Seek, SeekFrom};
 use std::path::PathBuf;
+use std::sync::{Arc, Barrier};
+use std::thread;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -140,8 +145,9 @@ fn bench_tail_reading(c: &mut Criterion) {
     let temp_dir = TempDir::new().unwrap();
 
     let mut group = c.benchmark_group("tail_reading");
+    group.sample_size(20); // Reduce sample size for large file tests
 
-    for size in [100, 1000, 10000].iter() {
+    for size in [100, 1000, 10000, 100000].iter() {
         let log_file = create_test_log_file(&temp_dir.path().to_path_buf(), *size);
 
         group.throughput(Throughput::Elements(50)); // We're reading 50 entries
@@ -283,15 +289,192 @@ fn bench_memory_usage(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark writing entries of various sizes
+fn bench_write_by_size(c: &mut Criterion) {
+    let temp_dir = TempDir::new().unwrap();
+
+    let mut group = c.benchmark_group("write_by_size");
+
+    for size in [1024, 10 * 1024, 100 * 1024, 1024 * 1024].iter() {
+        let size_label = match size {
+            1024 => "1KB",
+            10240 => "10KB",
+            102400 => "100KB",
+            _ => "1MB",
+        };
+
+        group.throughput(Throughput::Bytes(*size as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(size_label), size, |b, &size| {
+            let entry = common::create_entry_with_size(size);
+            let log_path = temp_dir.path().join(format!("{}.jsonl", chrono::Utc::now().format("%Y-%m-%d")));
+
+            b.iter(|| {
+                let file = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                    .unwrap();
+
+                let mut writer = BufWriter::with_capacity(8192, file);
+                serde_json::to_writer(&mut writer, &entry).unwrap();
+                writer.write_all(b"\n").unwrap();
+                writer.flush().unwrap();
+            })
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark concurrent writes with different thread counts
+fn bench_concurrent_writes(c: &mut Criterion) {
+    let mut group = c.benchmark_group("concurrent_writes");
+    group.sample_size(10); // Reduce sample size for concurrent tests
+
+    for num_threads in [1, 2, 4, 8, 10, 16].iter() {
+        group.throughput(Throughput::Elements((*num_threads * 100) as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(format!("{}threads", num_threads)),
+            num_threads,
+            |b, &num_threads| {
+                b.iter(|| {
+                    let temp_dir = TempDir::new().unwrap();
+                    let writer = Arc::new(LogWriter::new(temp_dir.path().to_path_buf()).unwrap());
+                    let barrier = Arc::new(Barrier::new(num_threads));
+
+                    let mut handles = vec![];
+                    for i in 0..num_threads {
+                        let writer = writer.clone();
+                        let barrier = barrier.clone();
+
+                        let handle = thread::spawn(move || {
+                            barrier.wait(); // Synchronize start
+
+                            for j in 0..100 {
+                                let entry = LogEntry::new_mcp(
+                                    format!("thread-{}-{}", i, j),
+                                    "INFO".to_string(),
+                                    format!("Concurrent message {} from thread {}", j, i),
+                                );
+                                writer.write_sync(&entry).unwrap();
+                            }
+                        });
+
+                        handles.push(handle);
+                    }
+
+                    for handle in handles {
+                        handle.join().unwrap();
+                    }
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark JSON serialization with different complexity levels
+fn bench_json_serialization(c: &mut Criterion) {
+    let mut group = c.benchmark_group("json_serialization");
+
+    let simple = common::create_simple_entry();
+    let moderate = common::create_moderate_entry();
+    let complex = common::create_complex_entry();
+
+    group.bench_function("simple", |b| {
+        b.iter(|| {
+            let _json = serde_json::to_string(black_box(&simple)).unwrap();
+        })
+    });
+
+    group.bench_function("moderate", |b| {
+        b.iter(|| {
+            let _json = serde_json::to_string(black_box(&moderate)).unwrap();
+        })
+    });
+
+    group.bench_function("complex", |b| {
+        b.iter(|| {
+            let _json = serde_json::to_string(black_box(&complex)).unwrap();
+        })
+    });
+
+    group.finish();
+}
+
+/// Benchmark sustained throughput over time
+fn bench_sustained_throughput(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sustained_throughput");
+    group.sample_size(10); // Reduce sample size for long-running tests
+
+    group.bench_function("1000_writes_per_sec", |b| {
+        b.iter(|| {
+            let temp_dir = TempDir::new().unwrap();
+            let writer = LogWriter::new(temp_dir.path().to_path_buf()).unwrap();
+
+            let start = std::time::Instant::now();
+            let mut count = 0;
+            let target_duration = std::time::Duration::from_secs(1);
+
+            while start.elapsed() < target_duration {
+                let entry = LogEntry::new_mcp(
+                    format!("throughput-{}", count),
+                    "INFO".to_string(),
+                    format!("Throughput test message {}", count),
+                );
+
+                writer.write_sync(&entry).unwrap();
+                count += 1;
+            }
+
+            black_box(count);
+        })
+    });
+
+    group.finish();
+}
+
 criterion_group!(
-    benches,
+    write_benches,
     bench_write_unbuffered,
     bench_write_buffered,
-    bench_hook_json_parsing,
+    bench_write_by_size
+);
+
+criterion_group!(
+    read_benches,
     bench_read_entire_file,
-    bench_tail_reading,
-    bench_hook_mode_full,
+    bench_tail_reading
+);
+
+criterion_group!(
+    concurrent_benches,
+    bench_concurrent_writes
+);
+
+criterion_group!(
+    serialization_benches,
+    bench_hook_json_parsing,
+    bench_json_serialization
+);
+
+criterion_group!(
+    throughput_benches,
+    bench_sustained_throughput,
+    bench_hook_mode_full
+);
+
+criterion_group!(
+    memory_benches,
     bench_memory_usage
 );
 
-criterion_main!(benches);
+criterion_main!(
+    write_benches,
+    read_benches,
+    concurrent_benches,
+    serialization_benches,
+    throughput_benches,
+    memory_benches
+);

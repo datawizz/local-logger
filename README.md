@@ -396,6 +396,47 @@ Key modules:
 - `UnifiedLogEntry`: Common structure for all logs
 - `LogSource`: Enum distinguishing MCP, Hook, and Proxy logs
 
+### Testing
+
+```bash
+# Run all tests
+cargo test
+
+# Run only unit tests
+cargo test --lib
+
+# Run only integration tests
+cargo test --test integration_tests
+
+# Run property-based tests
+cargo test --test property
+```
+
+### Benchmarking
+
+Performance benchmarks use [Criterion](https://github.com/bheisler/criterion.rs) for statistical analysis and regression detection:
+
+```bash
+# Run all benchmarks
+cargo bench
+
+# Run specific benchmark groups
+cargo bench -- write_benches
+cargo bench -- read_benches
+cargo bench -- concurrent_benches
+
+# View HTML reports with graphs and statistics
+open target/criterion/report/index.html
+```
+
+**Benchmark groups:**
+- `write_benches` - Write performance (buffering strategies, 1KB-1MB entries)
+- `read_benches` - Full file vs tail reading (100-100K entries)
+- `concurrent_benches` - Multi-threaded writes (1-16 threads)
+- `serialization_benches` - JSON serialization complexity
+- `throughput_benches` - Sustained throughput and hook mode pipeline
+- `memory_benches` - Memory efficiency comparisons
+
 ## Security Considerations
 
 ### Certificate Management
