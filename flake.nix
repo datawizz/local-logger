@@ -51,6 +51,10 @@
       nixModules.default = import ./packaging/nix/modules/local-logger.nix;
       nixModules.local-logger = self.nixModules.default;
 
+      # Home-manager module for per-user configuration
+      homeManagerModules.default = import ./packaging/nix/modules/home-manager.nix;
+      homeManagerModules.local-logger = self.homeManagerModules.default;
+
       # Overlay for adding package to nixpkgs
       overlays.default = final: prev: {
         local-logger = final.callPackage ./packaging/nix/package.nix {
