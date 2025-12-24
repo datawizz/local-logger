@@ -40,19 +40,9 @@
         };
       }
     ) // {
-      # NixOS/Darwin modules (not system-specific)
-      nixosModules.default = import ./packaging/nix/modules/nixos-service.nix;
-      nixosModules.local-logger = self.nixosModules.default;
-
-      darwinModules.default = import ./packaging/nix/modules/darwin-service.nix;
-      darwinModules.local-logger = self.darwinModules.default;
-
-      # Cross-platform base module
-      nixModules.default = import ./packaging/nix/modules/local-logger.nix;
-      nixModules.local-logger = self.nixModules.default;
-
-      # Home-manager module for per-user configuration
-      homeManagerModules.default = import ./packaging/nix/modules/home-manager.nix;
+      # Home-manager module (canonical cross-platform module)
+      # Works on both Darwin (launchd) and Linux (systemd)
+      homeManagerModules.default = import ./packaging/nix/modules/default.nix;
       homeManagerModules.local-logger = self.homeManagerModules.default;
 
       # Overlay for adding package to nixpkgs
